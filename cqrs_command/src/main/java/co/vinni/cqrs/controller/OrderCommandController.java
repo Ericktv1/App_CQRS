@@ -13,7 +13,11 @@ import org.springframework.web.bind.annotation.*;
 public class OrderCommandController {
     private final OrderCommandService service;
 
-    @PostMapping("/") public OrderCmd create(@RequestBody CreateOrderRequest r){ return service.create(r); }
+    @PostMapping
+    public OrderCmd create(@RequestBody CreateOrderRequest r){
+        return service.create(r);
+    }
+
     @PutMapping("/{id}/accept") public OrderCmd accept(@PathVariable Long id){ return service.accept(id); }
     @PutMapping("/{id}/reject") public OrderCmd reject(@PathVariable Long id){ return service.reject(id); }
 }
