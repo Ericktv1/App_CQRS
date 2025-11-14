@@ -1,11 +1,32 @@
 spring:
+  application:
+    name: cqrs_query
+
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/cqrs_query_db
+      auto-index-creation: true
+
   kafka:
     consumer:
       bootstrap-servers: localhost:9092
+      group-id: student-event-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring:
-          json:
-            trusted:
-              packages: co.vinni.cqrs.dto
+        spring.json.trusted.packages: "*"
+        spring.json.type.mapping: studentEvent:co.vinni.cqrs.dto.StudentEvent
+      auto-offset-reset: earliest
+      enable-auto-commit: true
+
+logging:
+  level:
+    co.vinni.cqrs: DEBUG
+    org.springframework.data.mongodb: DEBUG
+    org.springframework.kafka: INFO
+  file:
+    path: ./logs
+    max-size: 10MB
+
+server:
+  port: 8622

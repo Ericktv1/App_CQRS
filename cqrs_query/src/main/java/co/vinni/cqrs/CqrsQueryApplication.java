@@ -1,16 +1,16 @@
 package co.vinni.cqrs;
 
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 
-@Slf4j
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+		DataSourceAutoConfiguration.class,
+		HibernateJpaAutoConfiguration.class
+})
 public class CqrsQueryApplication {
-
 	public static void main(String[] args) {
-		log.info("Inicio la aplicación Query");
 		SpringApplication.run(CqrsQueryApplication.class, args);
 	}
-
 }

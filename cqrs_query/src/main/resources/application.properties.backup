@@ -1,0 +1,9 @@
+spring.application.name=cqrs_query
+server.port=8622
+
+# --- MongoDB Connection ---
+spring.data.mongodb.uri=mongodb://localhost:27017/cqrs_query_db
+
+# Logging
+spring.logging.path=./logs
+spring.logging.max.size=10 MB

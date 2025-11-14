@@ -1,6 +1,32 @@
 spring:
+  application:
+    name: cqrs_command
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cqrs_command_db
+    username: user_command
+    password: password123  # Usa la misma contraseña que creaste arriba
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
   kafka:
     producer:
       bootstrap-servers: localhost:9092
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer:  org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+logging:
+  level:
+    co.vinni.cqrs: DEBUG
+    org.hibernate.SQL: DEBUG
+
+server:
+  port: 8080

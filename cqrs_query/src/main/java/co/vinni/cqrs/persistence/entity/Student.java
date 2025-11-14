@@ -1,24 +1,19 @@
 package co.vinni.cqrs.persistence.entity;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.*;
 
-@Entity
-@Table(name = "students_query")
-@Getter
-@Setter
+import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Data  // Esta anotación genera getters, setters, toString, equals y hashCode
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Document(collection = "students_query")
 public class Student {
-    @Id
-    @GeneratedValue
-    private long code;
 
+    @Id
+    private String code;
     private String firstName;
     private String lastName;
     private String email;
-
 }
