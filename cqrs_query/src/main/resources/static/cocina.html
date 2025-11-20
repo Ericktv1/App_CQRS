@@ -211,6 +211,12 @@
     document.getElementById('btnDeactivate').onclick = () => upsertPromotion(false);
 
     // ----- Pedidos -----
+        const STATUS_LABELS = {
+      PENDING:  'Pendiente',
+      ACCEPTED: 'Aceptado',
+      REJECTED: 'Rechazado'
+    };
+
     async function loadOrders() {
       const kitchen = cuisineEl.value;
       setTitleCuisine();
@@ -228,6 +234,7 @@
 
       data.forEach(o => {
         const total = (o.unitPrice || 0) * (o.quantity || 0);
+        const statusText = STATUS_LABELS[o.status] || o.status;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -237,7 +244,7 @@
           <td>${o.productCode}</td>
           <td class="right">${o.quantity}</td>
           <td class="right">${fmtCOP(total)}</td>
-          <td><span class="badge ${o.status}">${o.status}</span></td>
+          <td><span class="badge ${o.status}">${statusText}</span></td>
           <td class="right">
             <button class="btn ok">Aceptar</button>
             <button class="btn danger">Denegar</button>
