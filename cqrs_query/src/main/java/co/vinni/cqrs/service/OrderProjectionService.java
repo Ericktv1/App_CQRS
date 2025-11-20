@@ -80,7 +80,7 @@ public class OrderProjectionService {
         invoices.save(Invoice.builder()
                 .orderId(o.getId()).customer(o.getCustomer()).kitchen(o.getKitchen())
                 .productCode(o.getProductCode()).quantity(o.getQuantity())
-                .unitPrice(o.getUnitPrice()).discount(discount)
+                .unitPrice(o.getUnitPrice()).subtotal(subtotal) .discount(discount)
                 .twoForOneApplied(twoForOneApplied).iva(iva).total(total).build());
     }
 }

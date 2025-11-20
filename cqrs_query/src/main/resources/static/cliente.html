@@ -86,12 +86,22 @@
 
             <div id="sentMsg" class="alert ok" style="display:none"></div>
             <div id="finalMsg" class="alert info" style="display:none"></div>
+
+            <div id="invoiceBox" class="card panel" style="display:none">
+                <div class="muted">Factura</div>
+                <div id="invoiceContent" style="margin-top:8px;font-size:14px"></div>
+            </div>
+
         </aside>
     </div>
 </div>
 
 <script>
     const CMD_BASE = 'http://localhost:8620';
+    const QRY_BASE = 'http://localhost:8622';  // para leer la factura desde cqrs_query
+
+    let currentOrderId = null;
+    let invoiceInterval = null;
 
     const fmtCOP = n =>
       Number(n).toLocaleString('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
@@ -100,7 +110,7 @@
     const CATALOG_DATA = {
       ITALIAN: {
         'Spaghetti Bolognese': { code:'IT01', price:28000 },
-        'Pizza Margherita':   { code:'IT02', price:32000 }
+        'Pizza Margherita':    { code:'IT02', price:32000 }
       },
       ASIAN: {
         'Ramen Tonkotsu': { code:'AS01', price:30000 },
@@ -120,9 +130,12 @@
 
     function setUser(u){
       state.user = u || null;
-      if (u) sessionStorage.setItem('clientUser', u); else sessionStorage.removeItem('clientUser');
+      if (u) sessionStorage.setItem('clientUser', u);
+      else   sessionStorage.removeItem('clientUser');
+
       document.getElementById('who').textContent = state.user || '—';
-      document.getElementById('btnLogin').style.display  = state.user ? 'inline-block' : 'inline-block';
+      // ocultar/mostrar botones correctamente
+      document.getElementById('btnLogin').style.display  = state.user ? 'none' : 'inline-block';
       document.getElementById('btnLogout').style.display = state.user ? 'inline-block' : 'none';
     }
 
@@ -141,6 +154,15 @@
       setUser(null);
       document.getElementById('sentMsg').style.display = 'none';
       document.getElementById('finalMsg').style.display = 'none';
+
+      // limpiar factura y detener polling
+      currentOrderId = null;
+      if (invoiceInterval) {
+        clearInterval(invoiceInterval);
+        invoiceInterval = null;
+      }
+      document.getElementById('invoiceBox').style.display = 'none';
+      document.getElementById('invoiceContent').innerHTML = '';
     });
 
     document.getElementById('btnFocusOrder').addEventListener('click', ()=>{
@@ -228,70 +250,137 @@
       f.style.display = 'block';
     }
 
-async function sendOrder(){
-  if(!state.user){
-    alert('Primero inicia sesión.');
-    return;
-  }
+    function renderInvoice(inv) {
+      const box = document.getElementById('invoiceBox');
+      const content = document.getElementById('invoiceContent');
 
-  const selected = Object.entries(state.quantities)
-    .filter(([,q])=> Number(q||0) > 0);
+      box.style.display = 'block';
 
-  if(selected.length === 0){
-    alert('Selecciona al menos un producto (con cantidad mayor que 0).');
-    return;
-  }
-  if(selected.length > 1){
-    alert('Por ahora este backend CQRS solo soporta 1 producto por pedido. Deja cantidad > 0 solo en un producto.');
-    return;
-  }
+      const unitPrice = Number(inv.unitPrice || 0);
+      const qty       = Number(inv.quantity || 0);
+      const subtotal  = unitPrice * qty;
 
-  const [name, qty] = selected[0];
-  const info = state.catalog[name];
-  if(!info){
-    alert('Error interno con el catálogo.');
-    return;
-  }
-
-  const body = {
-    customer: state.user,
-    kitchen: selCuisineVal(),      // "ITALIAN" / "ASIAN"
-    productCode: info.code,
-    quantity: Number(qty),
-    unitPrice: info.price
-  };
-
-  try {
-    const res = await fetch(`${CMD_BASE}/orders`, {   // <- sin / final para matchear al @PostMapping
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-
-    if(!res.ok){
-      const text = await res.text().catch(()=> '');
-      alert(`Error creando pedido en CQRS COMMAND: ${res.status} ${res.statusText}\n${text}`);
-      return;
+      content.innerHTML = `
+        <p><strong>Orden #${inv.orderId}</strong></p>
+        <p>Cliente: <strong>${inv.customer}</strong></p>
+        <p>Cocina: <span class="pill">${inv.kitchen}</span></p>
+        <p>Producto: ${inv.productCode} × ${qty}</p>
+        <p>Subtotal: ${fmtCOP(subtotal)}</p>
+        <p>Descuento: ${fmtCOP(inv.discount || 0)}</p>
+        <p>IVA: ${fmtCOP(inv.iva || 0)}</p>
+        <p style="margin-top:8px;font-size:18px;">
+          <strong>Total a pagar: ${fmtCOP(inv.total || 0)}</strong>
+        </p>
+        <p class="muted" style="margin-top:6px;">✅ Tu pedido fue aceptado por la cocina.</p>
+      `;
     }
 
-    const data = await res.json().catch(()=>null);
-    if(!data || data.id == null){
-      alert('El backend no devolvió un ID de pedido.');
-      return;
+    async function checkInvoice() {
+      if (!currentOrderId) return;
+
+      try {
+        const res = await fetch(`${QRY_BASE}/query/invoices`, { cache: 'no-store' });
+        if (!res.ok) return;
+
+        const list = await res.json().catch(() => []);
+        if (!Array.isArray(list)) return;
+
+        const inv = list.find(i => Number(i.orderId) === Number(currentOrderId));
+        if (!inv) return; // todavía no existe factura
+
+        clearInterval(invoiceInterval);
+        invoiceInterval = null;
+
+        renderInvoice(inv);
+
+        const f = document.getElementById('finalMsg');
+        f.className = 'alert ok';
+        f.innerHTML = '✅ Tu pedido fue aceptado. Esta es tu factura.';
+        f.style.display = 'block';
+      } catch (e) {
+        console.error('Error consultando factura', e);
+      }
     }
 
-    showSent(data);   // muestra el resumen en la derecha
-  } catch (e) {
-    console.error('Error en fetch /orders:', e);
-    alert('No se pudo contactar el servidor de órdenes (COMMAND). Revisa si está arriba en http://localhost:8620');
-  }
-}
+    async function sendOrder(){
+      if(!state.user){
+        alert('Primero inicia sesión.');
+        return;
+      }
 
+      const selected = Object.entries(state.quantities)
+        .filter(([,q])=> Number(q||0) > 0);
+
+      if(selected.length === 0){
+        alert('Selecciona al menos un producto (con cantidad mayor que 0).');
+        return;
+      }
+      if(selected.length > 1){
+        alert('Por ahora este backend CQRS solo soporta 1 producto por pedido. Deja cantidad > 0 solo en un producto.');
+        return;
+      }
+
+      const [name, qty] = selected[0];
+      const info = state.catalog[name];
+      if(!info){
+        alert('Error interno con el catálogo.');
+        return;
+      }
+
+      const body = {
+        customer: state.user,
+        kitchen: selCuisineVal(),
+        productCode: info.code,
+        quantity: Number(qty),
+        unitPrice: info.price
+      };
+
+      try {
+        const res = await fetch(`${CMD_BASE}/orders`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+
+        if(!res.ok){
+          const text = await res.text().catch(()=> '');
+          alert(`Error creando pedido en CQRS COMMAND: ${res.status} ${res.statusText}\n${text}`);
+          return;
+        }
+
+        const data = await res.json().catch(()=>null);
+        if(!data || data.id == null){
+          alert('El backend no devolvió un ID de pedido.');
+          return;
+        }
+
+        showSent(data);
+
+        // guardar id de orden y empezar a buscar la factura
+        currentOrderId = data.id;
+
+        document.getElementById('invoiceBox').style.display = 'none';
+        document.getElementById('invoiceContent').innerHTML = '';
+
+        const f = document.getElementById('finalMsg');
+        f.className = 'alert info';
+        f.innerHTML = 'Tu pedido fue registrado. Cuando la cocina lo acepte, verás aquí tu factura.';
+        f.style.display = 'block';
+
+        if (invoiceInterval) clearInterval(invoiceInterval);
+        invoiceInterval = setInterval(checkInvoice, 3000);
+
+      } catch (e) {
+        console.error('Error en fetch /orders:', e);
+        alert('No se pudo contactar el servidor de órdenes (COMMAND). Revisa si está arriba en http://localhost:8620');
+      }
+    }
 
     document.getElementById('send').addEventListener('click', sendOrder);
 
     // Inicial
     loadCatalog();
 </script>
+
 </body>
 </html>

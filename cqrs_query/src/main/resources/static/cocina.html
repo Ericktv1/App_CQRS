@@ -247,6 +247,7 @@
         const [btnOk, btnNo] = tr.querySelectorAll('button');
         btnOk.onclick = async () => {
           await fetch(`${CMD_BASE}/orders/${o.id}/accept`, { method: 'PUT' });
+
           await loadOrders();
           await loadInvoices();
         };
@@ -276,21 +277,26 @@
         return;
       }
 
-      data
-        .filter(i => !i.kitchen || i.kitchen === kitchen) // si tu InvoiceView tiene kitchen
-        .forEach(i => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${i.orderId}</td>
-            <td>${i.customer}</td>
-            <td>${i.kitchen || '-'}</td>
-            <td class="right">${fmtCOP(i.subtotal || 0)}</td>
-            <td class="right">${fmtCOP(i.discount || 0)}</td>
-            <td class="right">${fmtCOP(i.iva || 0)}</td>
-            <td class="right">${fmtCOP(i.total || 0)}</td>
-          `;
-          tb.appendChild(tr);
-        });
+    data
+      .filter(i => !i.kitchen || i.kitchen === kitchen)
+      .forEach(i => {
+        // 👇 Calculamos el subtotal en el front
+        const unitPrice = Number(i.unitPrice || 0);
+        const quantity  = Number(i.quantity || 0);
+        const subtotal  = unitPrice * quantity;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i.orderId}</td>
+          <td>${i.customer}</td>
+          <td>${i.kitchen || '-'}</td>
+          <td class="right">${fmtCOP(subtotal)}</td>
+          <td class="right">${fmtCOP(i.discount || 0)}</td>
+          <td class="right">${fmtCOP(i.iva || 0)}</td>
+          <td class="right">${fmtCOP(i.total || 0)}</td>
+        `;
+        tb.appendChild(tr);
+      });
     }
 
     document.getElementById('refreshInvoices').onclick = loadInvoices;
