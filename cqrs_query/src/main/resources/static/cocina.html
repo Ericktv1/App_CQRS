@@ -188,7 +188,7 @@
         body.targetProductCode = code;
       }
 
-      const res = await fetch(`${CMD_BASE}/promotions`, {
+      const res = await fetch(`${CMD_BASE}/promotions/`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)

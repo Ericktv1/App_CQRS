@@ -123,7 +123,11 @@
     const state = {
       user: null,
       catalog: {},
-      quantities: {}
+      quantities: {},
+      promotions: {
+        discount20: false,
+        twoForOneTargets: []
+      }
     };
 
     const USERS = { erick:'123', jeison:'456', arelis:'789' };
@@ -221,19 +225,93 @@
       buildCatalog();
     }
 
+    async function loadPromotions() {
+      const kitchen = selCuisineVal(); // ITALIAN / ASIAN
+      const banner = document.getElementById('promoBanner');
+
+      try {
+        const res = await fetch(
+          `${QRY_BASE}/query/promotions?kitchen=${encodeURIComponent(kitchen)}`,
+          { cache: 'no-store' }
+        );
+        const data = await res.json().catch(() => []);
+
+        const actives = (Array.isArray(data) ? data : []).filter(p => p.active);
+
+        const has20 = actives.some(p => p.type === 'DISCOUNT_20');
+        const twoForOneTargets = actives
+          .filter(p => p.type === 'TWO_FOR_ONE' && p.targetProductCode)
+          .map(p => p.targetProductCode);
+
+        state.promotions = { discount20: has20, twoForOneTargets };
+
+        // Mostrar banner
+        if (!actives.length) {
+          banner.style.display = 'none';
+          banner.textContent = '';
+        } else {
+          const parts = [];
+          if (has20) parts.push('20% de descuento en toda la orden');
+          if (twoForOneTargets.length) {
+            parts.push('2x1 en: ' + twoForOneTargets.join(', '));
+          }
+          banner.style.display = 'block';
+          banner.textContent = 'Promociones activas: ' + parts.join(' • ');
+        }
+
+        // Recalcular total con promos
+        updateEstimate();
+
+      } catch (e) {
+        console.error('Error cargando promociones', e);
+        banner.style.display = 'none';
+      }
+    }
+
     function updateEstimate(){
-      let total = 0;
+      let subtotal = 0;
+
+      // subtotal sin promos
       Object.entries(state.quantities).forEach(([name, q])=>{
         const info = state.catalog[name];
         if (!info) return;
-        total += (info.price || 0) * Number(q||0);
+        const qty = Number(q || 0);
+        subtotal += (info.price || 0) * qty;
       });
+
+      let discount = 0;
+
+      // 2x1 por producto
+      const twoForOneSet = new Set(state.promotions.twoForOneTargets || []);
+      Object.entries(state.quantities).forEach(([name, q])=>{
+        const info = state.catalog[name];
+        if (!info) return;
+        const qty = Number(q || 0);
+        if (qty <= 0) return;
+
+        if (twoForOneSet.has(info.code)) {
+          const freeUnits = Math.floor(qty / 2);
+          discount += freeUnits * (info.price || 0);
+        }
+      });
+
+      // 20% sobre el subtotal
+      if (state.promotions.discount20) {
+        discount += subtotal * 0.20;
+      }
+
+      // mismo cálculo que en el backend
+      let base = Math.max(0, subtotal - discount);
+      let iva  = base * 0.19;
+      let total = base + iva;
+
       document.getElementById('est').textContent = fmtCOP(total);
     }
 
     document.getElementById('cuisine').addEventListener('change', ()=>{
       state.quantities = {};
       loadCatalog();
+      loadPromotions();
     });
 
     // ----- Envío de pedido a CQRS COMMAND -----
@@ -399,11 +477,27 @@
       }
     }
 
-
     document.getElementById('send').addEventListener('click', sendOrder);
+
+    // Polling para actualizar promociones automáticamente cada 3 segundos
+    let promoInterval = null;
+
+    function startPromoPolling() {
+      if (promoInterval) clearInterval(promoInterval);
+      promoInterval = setInterval(loadPromotions, 3000);
+    }
+
+    function stopPromoPolling() {
+      if (promoInterval) {
+        clearInterval(promoInterval);
+        promoInterval = null;
+      }
+    }
 
     // Inicial
     loadCatalog();
+    loadPromotions();
+    startPromoPolling();
 </script>
 
 </body>
