@@ -237,16 +237,28 @@
     });
 
     // ----- Envío de pedido a CQRS COMMAND -----
-    function showSent(order){
+    function showSent(orders){
       const sent = document.getElementById('sentMsg');
-      sent.innerHTML =
-        `Pedido enviado ✅ (ID: <b>${order.id}</b>)<br>` +
-        `Producto: <b>${order.productCode}</b> × <b>${order.quantity}</b> — Cocina: <b>${order.kitchen}</b>`;
+
+      if (orders.length === 1) {
+        const o = orders[0];
+        sent.innerHTML =
+          `Pedido enviado ✅ (ID: <b>${o.id}</b>)<br>` +
+          `Producto: <b>${o.productCode}</b> × <b>${o.quantity}</b> — Cocina: <b>${o.kitchen}</b>`;
+      } else {
+        const detalle = orders.map(o =>
+          `• ID <b>${o.id}</b>: <b>${o.productCode}</b> × <b>${o.quantity}</b>`
+        ).join('<br>');
+
+        sent.innerHTML =
+          `Se enviaron <b>${orders.length}</b> pedidos:<br>${detalle}`;
+      }
+
       sent.style.display = 'block';
 
       const f = document.getElementById('finalMsg');
       f.className = 'alert info';
-      f.innerHTML = 'Tu pedido fue registrado. El restaurante lo verá en la pantalla de cocina.';
+      f.innerHTML = 'Tu(s) pedido(s) fueron registrados. El restaurante los verá en la pantalla de cocina.';
       f.style.display = 'block';
     }
 
@@ -315,56 +327,67 @@
         alert('Selecciona al menos un producto (con cantidad mayor que 0).');
         return;
       }
-      if(selected.length > 1){
-        alert('Por ahora este backend CQRS solo soporta 1 producto por pedido. Deja cantidad > 0 solo en un producto.');
-        return;
-      }
 
-      const [name, qty] = selected[0];
-      const info = state.catalog[name];
-      if(!info){
-        alert('Error interno con el catálogo.');
-        return;
-      }
-
-      const body = {
-        customer: state.user,
-        kitchen: selCuisineVal(),
-        productCode: info.code,
-        quantity: Number(qty),
-        unitPrice: info.price
-      };
+      const kitchen = selCuisineVal();
+      const createdOrders = [];
 
       try {
-        const res = await fetch(`${CMD_BASE}/orders`, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(body)
-        });
+        for (const [name, qtyRaw] of selected) {
+          const qty = Number(qtyRaw);
+          const info = state.catalog[name];
+          if (!info) continue;
 
-        if(!res.ok){
-          const text = await res.text().catch(()=> '');
-          alert(`Error creando pedido en CQRS COMMAND: ${res.status} ${res.statusText}\n${text}`);
+          const body = {
+            customer: state.user,
+            kitchen: kitchen,       // "ITALIAN" / "ASIAN"
+            productCode: info.code, // 👈 el backend sigue igual
+            quantity: qty,
+            unitPrice: info.price
+          };
+
+          const res = await fetch(`${CMD_BASE}/orders`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(body)
+          });
+
+          if(!res.ok){
+            const text = await res.text().catch(()=> '');
+            alert(`Error creando pedido en CQRS COMMAND: ${res.status} ${res.statusText}\n${text}`);
+            return;
+          }
+
+          const data = await res.json().catch(()=>null);
+          if(!data || data.id == null){
+            alert('El backend no devolvió un ID de pedido.');
+            return;
+          }
+
+          createdOrders.push({
+            id: data.id,
+            productCode: info.code,
+            quantity: qty,
+            kitchen: kitchen
+          });
+        }
+
+        if (createdOrders.length === 0){
+          alert('No se pudo crear ningún pedido.');
           return;
         }
 
-        const data = await res.json().catch(()=>null);
-        if(!data || data.id == null){
-          alert('El backend no devolvió un ID de pedido.');
-          return;
-        }
+        // Mostrar resumen de todos los pedidos creados
+        showSent(createdOrders);
 
-        showSent(data);
-
-        // guardar id de orden y empezar a buscar la factura
-        currentOrderId = data.id;
+        // Para la factura del cliente usamos, por simplicidad, la ÚLTIMA orden creada
+        currentOrderId = createdOrders[createdOrders.length - 1].id;
 
         document.getElementById('invoiceBox').style.display = 'none';
         document.getElementById('invoiceContent').innerHTML = '';
 
         const f = document.getElementById('finalMsg');
         f.className = 'alert info';
-        f.innerHTML = 'Tu pedido fue registrado. Cuando la cocina lo acepte, verás aquí tu factura.';
+        f.innerHTML = 'Tus pedidos fueron registrados. Cuando la cocina acepte cada uno, se generará una factura por pedido (aquí verás la última).';
         f.style.display = 'block';
 
         if (invoiceInterval) clearInterval(invoiceInterval);
@@ -375,6 +398,7 @@
         alert('No se pudo contactar el servidor de órdenes (COMMAND). Revisa si está arriba en http://localhost:8620');
       }
     }
+
 
     document.getElementById('send').addEventListener('click', sendOrder);
 
